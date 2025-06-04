@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>楡陵祭&nbsp;宝石サイダー</title>
+  <style>
+    body {
+      font-family: "Nico Moji";
+      text-align: center;
+      padding: 20px;
+      background-color: #ffffff;
+    }
+
+    .button-container {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .color-button {
+      font-size: 20px;
+      padding: 20px 40px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      min-width: 120px;
+      color: white;
+    }
+
+
+    .red { background-color: #F34A4A; }
+
+    .blue { background-color: #5CC5EF;  }
+
+    .yellow { background-color: #FFD932; color: black; }
+
+    .green { background-color: #A2C523; }
+
+    .white { background-color: #eeeeee; color: black; border: 1px solid #ccc; }
+
+    .counter {
+      margin-top: 10px;
+      font-size: 24px;
+    }
+
+    .action-buttons {
+      margin-top: 20px;
+    }
+
+    .reset-btn, .undo-btn  {
+      padding: 10px 20px;
+      font-size: 18px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .reset-btn {
+      background-color: #444;
+      color: white;
+    }
+
+    .undo-btn {
+      background-color: #888;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>楡陵祭&nbsp;宝石サイダー</h1>
+
+  <div class="button-container">
+    <div>
+      <button class="color-button red" onclick="increment('red')">ルビー</button>
+      <div class="counter" id="count-red">0</div>
+    </div>
+    <div>
+      <button class="color-button blue" onclick="increment('blue')">サファイア</button>
+      <div class="counter" id="count-blue">0</div>
+    </div>
+    <div>
+      <button class="color-button yellow" onclick="increment('yellow')">トパーズ</button>
+      <div class="counter" id="count-yellow">0</div>
+    </div>
+    <div>
+      <button class="color-button green" onclick="increment('green')">エメラルド</button>
+      <div class="counter" id="count-green">0</div>
+    </div>
+    <div>
+      <button class="color-button white" onclick="increment('white')">ダイヤ</button>
+      <div class="counter" id="count-white">0</div>
+    </div>
+  </div>
+
+  <div class="action-buttons">
+    <button class="reset-btn" onclick="resetCounts()">リセット</button>
+    <button class="undo-btn" onclick="undo()">取り消し</button>
+    <button class="reset-btn" onclick="exportCSV()">CSV出力</button>
+  </div>
+
+  <script>
+    let counts = { red: 0, blue: 0, yellow: 0, green: 0, white: 0 };
+    let historyStack = [];
+
+    window.onload = function () {
+      const savedCounts = localStorage.getItem("colorCounts");
+      if (savedCounts) {
+        counts = JSON.parse(savedCounts);
+      }
+
+      const savedHistory = localStorage.getItem("colorCountsHistory");
+      if (savedHistory) {
+        historyStack = JSON.parse(savedHistory);
+      }
+
+      updateDisplay();
+      saveHourlySnapshot();  // 起動時に1回保存
+    };
+
+    function updateDisplay() {
+      for (const color in counts) {
+        document.getElementById(`count-${color}`).textContent = counts[color];
+      }
+    }
+
+    function saveToHistory() {
+      historyStack.push({ ...counts });
+      localStorage.setItem("colorCountsHistory", JSON.stringify(historyStack));
+    }
+
+    function saveAll() {
+      localStorage.setItem("colorCounts", JSON.stringify(counts));
+      localStorage.setItem("colorCountsHistory", JSON.stringify(historyStack));
+      saveHourlySnapshot();
+    }
+
+    function increment(color) {
+      saveToHistory();
+      counts[color]++;
+      updateDisplay();
+      saveAll();
+    }
+
+    function resetCounts() {
+      saveToHistory();
+      for (const color in counts) {
+        counts[color] = 0;
+      }
+      updateDisplay();
+      saveAll();
+    }
+
+    function undo() {
+      if (historyStack.length > 0) {
+        const previous = historyStack.pop();
+        counts = { ...previous };
+        updateDisplay();
+        saveAll();
+      } else {
+        alert("これ以上取り消せません。");
+      }
+    }
+
+    function saveHourlySnapshot() {
+      const now = new Date();
+      now.setMinutes(0, 0, 0); // 時刻を「その時の0分」に切り捨て
+      const key = `snapshot_${now.toISOString().slice(0, 13)}`; // 例: snapshot_2025-06-04T14
+      const snapshots = JSON.parse(localStorage.getItem("hourlySnapshots") || "{}");
+      snapshots[key] = { ...counts };
+      localStorage.setItem("hourlySnapshots", JSON.stringify(snapshots));
+    }
+function exportCSV() {
+  const snapshots = JSON.parse(localStorage.getItem("hourlySnapshots") || "{}");
+  const rows = [["時間", "ルビー", "サファイア", "トパーズ", "エメラルド", "ダイヤ"]];
+
+  for (const key of Object.keys(snapshots).sort()) {
+    const time = key.replace("snapshot_", "").replace("T", " ") + ":00";
+    const data = snapshots[key];
+    rows.push([
+      time,
+      data.red || 0,
+      data.blue || 0,
+      data.yellow || 0,
+      data.green || 0,
+      data.white || 0
+    ]);
+  }
+
+  const csvContent = rows.map(row => row.join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", "count_log.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+  </script>
+</body>
+</html>
